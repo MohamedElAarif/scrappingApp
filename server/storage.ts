@@ -8,6 +8,8 @@ import {
   type ScrapingProgress,
   type ScrapedData
 } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export interface IStorage {
   // Configuration management
@@ -126,4 +128,97 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export class DatabaseStorage implements IStorage {
+  async createConfiguration(config: InsertScrapingConfiguration): Promise<ScrapingConfiguration> {
+    const [configuration] = await db
+      .insert(scrapingConfigurations)
+      .values(config)
+      .returning();
+    return configuration;
+  }
+
+  async getConfiguration(id: number): Promise<ScrapingConfiguration | undefined> {
+    const [configuration] = await db
+      .select()
+      .from(scrapingConfigurations)
+      .where(eq(scrapingConfigurations.id, id));
+    return configuration || undefined;
+  }
+
+  async getAllConfigurations(): Promise<ScrapingConfiguration[]> {
+    return await db.select().from(scrapingConfigurations);
+  }
+
+  async updateConfiguration(id: number, updates: Partial<InsertScrapingConfiguration>): Promise<ScrapingConfiguration | undefined> {
+    const [configuration] = await db
+      .update(scrapingConfigurations)
+      .set(updates)
+      .where(eq(scrapingConfigurations.id, id))
+      .returning();
+    return configuration || undefined;
+  }
+
+  async deleteConfiguration(id: number): Promise<boolean> {
+    const result = await db
+      .delete(scrapingConfigurations)
+      .where(eq(scrapingConfigurations.id, id));
+    return result.rowCount > 0;
+  }
+
+  async createSession(session: InsertScrapingSession): Promise<ScrapingSession> {
+    const [scrapingSession] = await db
+      .insert(scrapingSessions)
+      .values(session)
+      .returning();
+    return scrapingSession;
+  }
+
+  async getSession(id: number): Promise<ScrapingSession | undefined> {
+    const [session] = await db
+      .select()
+      .from(scrapingSessions)
+      .where(eq(scrapingSessions.id, id));
+    return session || undefined;
+  }
+
+  async updateSessionProgress(id: number, progress: ScrapingProgress): Promise<void> {
+    await db
+      .update(scrapingSessions)
+      .set({ progress })
+      .where(eq(scrapingSessions.id, id));
+  }
+
+  async updateSessionResults(id: number, results: ScrapedData[]): Promise<void> {
+    await db
+      .update(scrapingSessions)
+      .set({ results })
+      .where(eq(scrapingSessions.id, id));
+  }
+
+  async updateSessionStatus(id: number, status: string, completedAt?: Date): Promise<void> {
+    const updateData: any = { status };
+    if (completedAt) {
+      updateData.completedAt = completedAt;
+    }
+    
+    await db
+      .update(scrapingSessions)
+      .set(updateData)
+      .where(eq(scrapingSessions.id, id));
+  }
+
+  async addSessionError(id: number, error: string): Promise<void> {
+    const session = await this.getSession(id);
+    if (session) {
+      const errorLog = session.errorLog || [];
+      errorLog.push(error);
+      
+      await db
+        .update(scrapingSessions)
+        .set({ errorLog })
+        .where(eq(scrapingSessions.id, id));
+    }
+  }
+}
+
+export const storage = new DatabaseStorage();

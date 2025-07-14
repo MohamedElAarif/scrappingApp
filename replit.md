@@ -30,12 +30,13 @@ The application follows a modern full-stack architecture with clear separation b
 ## Key Components
 
 ### Data Storage
-- **Database**: PostgreSQL (configured for production)
+- **Database**: PostgreSQL (active production database)
 - **ORM**: Drizzle with TypeScript-first schema definitions
 - **Tables**: 
   - `scraping_configurations`: Stores scraping rules and settings
   - `scraping_sessions`: Tracks scraping progress and results
-- **Storage Interface**: Abstracted storage layer supporting both memory and database backends
+- **Storage Interface**: Database-backed storage using PostgreSQL with full CRUD operations
+- **Migration**: Completed migration from in-memory to persistent database storage
 
 ### Web Scraping Engine
 - **Browser Automation**: Puppeteer for dynamic content handling
