@@ -42,7 +42,11 @@ export default function ScraperPage() {
   const { data: currentSession } = useQuery<ScrapingSession>({
     queryKey: ["/api/sessions", currentSessionId],
     enabled: !!currentSessionId,
-    refetchInterval: currentSessionId && !["completed", "failed", "stopped"].includes(currentSession?.status || "") ? 2000 : false,
+    refetchInterval: (data) => {
+      if (!currentSessionId) return false;
+      const status = data?.status || "";
+      return !["completed", "failed", "stopped"].includes(status) ? 2000 : false;
+    },
   });
 
   // Start scraping mutation
