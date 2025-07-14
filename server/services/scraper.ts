@@ -1,4 +1,5 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
+import { execSync } from 'child_process';
 import { 
   ScrapingConfiguration, 
   ScrapingSelector, 
@@ -13,9 +14,35 @@ export class ScrapingService {
 
   async initBrowser(): Promise<void> {
     if (!this.browser) {
+      let executablePath: string | undefined;
+      
+      // Try to find Chrome/Chromium executable
+      try {
+        executablePath = execSync('which chromium', { encoding: 'utf8' }).trim();
+      } catch {
+        try {
+          executablePath = execSync('which chrome', { encoding: 'utf8' }).trim();
+        } catch {
+          try {
+            executablePath = execSync('which google-chrome', { encoding: 'utf8' }).trim();
+          } catch {
+            // Let Puppeteer handle the default path
+            executablePath = undefined;
+          }
+        }
+      }
+
       this.browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--disable-gpu',
+          '--window-size=1920x1080'
+        ],
+        executablePath
       });
     }
   }
