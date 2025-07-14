@@ -88,12 +88,12 @@ export class ScrapingService {
 
           // Wait for dynamic content if enabled
           if (config.options?.waitForDynamic) {
-            await page.waitForTimeout(2000);
+            await new Promise(resolve => setTimeout(resolve, 2000));
           }
 
           // Add request delay
           if (config.requestDelay && config.requestDelay > 0) {
-            await page.waitForTimeout(config.requestDelay);
+            await new Promise(resolve => setTimeout(resolve, config.requestDelay));
           }
 
           // Extract data using selectors
@@ -129,7 +129,7 @@ export class ScrapingService {
 
                 if (!isDisabled) {
                   await nextButton.click();
-                  await page.waitForTimeout(2000);
+                  await new Promise(resolve => setTimeout(resolve, 2000));
                   currentPage++;
                   currentUrl = page.url();
                 } else {
