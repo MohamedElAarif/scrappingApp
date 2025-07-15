@@ -32,6 +32,7 @@ export interface ScrapingSelector {
   name: string;
   cssSelector?: string;
   xpath?: string;
+  regex?: string;
   attribute: string;
   required: boolean;
 }

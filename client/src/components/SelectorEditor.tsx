@@ -35,6 +35,7 @@ export function SelectorEditor({ selectors, onChange, targetUrl, onTestSelector 
       name: "",
       cssSelector: "",
       xpath: "",
+      regex: "",
       attribute: "textContent",
       required: false,
     };
@@ -76,7 +77,7 @@ export function SelectorEditor({ selectors, onChange, targetUrl, onTestSelector 
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
               <div>
                 <Label className="text-xs font-medium text-gray-500 mb-1">CSS Selector</Label>
                 <Input
@@ -87,7 +88,7 @@ export function SelectorEditor({ selectors, onChange, targetUrl, onTestSelector 
                 />
               </div>
               <div>
-                <Label className="text-xs font-medium text-gray-500 mb-1">XPath (Alternative)</Label>
+                <Label className="text-xs font-medium text-gray-500 mb-1">XPath</Label>
                 <Input
                   value={selector.xpath || ""}
                   onChange={(e) => updateSelector(index, { xpath: e.target.value })}
@@ -95,6 +96,19 @@ export function SelectorEditor({ selectors, onChange, targetUrl, onTestSelector 
                   className="text-sm"
                 />
               </div>
+              <div>
+                <Label className="text-xs font-medium text-gray-500 mb-1">Regex Pattern</Label>
+                <Input
+                  value={selector.regex || ""}
+                  onChange={(e) => updateSelector(index, { regex: e.target.value })}
+                  placeholder="Price: \$(\d+\.\d+)"
+                  className="text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-500 mb-2 px-1">
+              Use CSS selector, XPath, or regex pattern. If regex is used, it will be applied to the text content found by CSS/XPath. Use parentheses () to capture groups.
             </div>
 
             <div className="flex items-center justify-between">
@@ -126,7 +140,7 @@ export function SelectorEditor({ selectors, onChange, targetUrl, onTestSelector 
                 variant="ghost"
                 size="sm"
                 onClick={() => handleTestSelector(selector)}
-                disabled={!targetUrl || !selector.cssSelector && !selector.xpath || testingSelector === selector.id}
+                disabled={!targetUrl || (!selector.cssSelector && !selector.xpath && !selector.regex) || testingSelector === selector.id}
                 className="text-sm text-blue-700 hover:text-blue-400"
               >
                 <Play className="h-3 w-3 mr-1" />

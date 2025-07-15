@@ -221,11 +221,49 @@ export class ScrapingService {
                     value = element.getAttribute(selector.attribute) || null;
                 }
 
+                // Apply regex pattern if specified
+                if (value && selector.regex) {
+                  try {
+                    const regex = new RegExp(selector.regex, 'g');
+                    const matches = regex.exec(value);
+                    if (matches) {
+                      // If there are capture groups, use the first one, otherwise use the full match
+                      value = matches[1] || matches[0];
+                    } else {
+                      value = null;
+                    }
+                  } catch (regexError) {
+                    console.error(`Invalid regex pattern for ${selector.name}:`, regexError);
+                    // Continue with original value if regex fails
+                  }
+                }
+
                 if (value) {
                   item[selector.name] = value;
                   hasData = true;
                 } else if (selector.required) {
                   return; // Skip this item if required field is missing
+                }
+              } else if (selector.regex && !selector.cssSelector && !selector.xpath) {
+                // Pure regex selector - apply to entire page content
+                try {
+                  const pageText = document.body.textContent || '';
+                  const regex = new RegExp(selector.regex, 'g');
+                  const matches = regex.exec(pageText);
+                  if (matches) {
+                    const value = matches[1] || matches[0];
+                    if (value) {
+                      item[selector.name] = value.trim();
+                      hasData = true;
+                    }
+                  } else if (selector.required) {
+                    return; // Skip this item if required field is missing
+                  }
+                } catch (regexError) {
+                  console.error(`Invalid regex pattern for ${selector.name}:`, regexError);
+                  if (selector.required) {
+                    return;
+                  }
                 }
               } else if (selector.required) {
                 return; // Skip this item if required element not found
@@ -278,9 +316,42 @@ export class ScrapingService {
                   value = element.getAttribute(selector.attribute) || null;
               }
 
+              // Apply regex pattern if specified
+              if (value && selector.regex) {
+                try {
+                  const regex = new RegExp(selector.regex, 'g');
+                  const matches = regex.exec(value);
+                  if (matches) {
+                    // If there are capture groups, use the first one, otherwise use the full match
+                    value = matches[1] || matches[0];
+                  } else {
+                    value = null;
+                  }
+                } catch (regexError) {
+                  console.error(`Invalid regex pattern for ${selector.name}:`, regexError);
+                  // Continue with original value if regex fails
+                }
+              }
+
               if (value) {
                 item[selector.name] = value;
                 hasData = true;
+              }
+            } else if (selector.regex && !selector.cssSelector && !selector.xpath) {
+              // Pure regex selector - apply to entire page content
+              try {
+                const pageText = document.body.textContent || '';
+                const regex = new RegExp(selector.regex, 'g');
+                const matches = regex.exec(pageText);
+                if (matches) {
+                  const value = matches[1] || matches[0];
+                  if (value) {
+                    item[selector.name] = value.trim();
+                    hasData = true;
+                  }
+                }
+              } catch (regexError) {
+                console.error(`Invalid regex pattern for ${selector.name}:`, regexError);
               }
             }
           } catch (error) {
@@ -373,7 +444,37 @@ export class ScrapingService {
                 value = element.getAttribute(sel.attribute) || null;
             }
 
+            // Apply regex pattern if specified
+            if (value && sel.regex) {
+              try {
+                const regex = new RegExp(sel.regex, 'g');
+                const matches = regex.exec(value);
+                if (matches) {
+                  value = matches[1] || matches[0];
+                } else {
+                  value = null;
+                }
+              } catch (regexError) {
+                return { success: false, error: `Invalid regex pattern: ${regexError.message}` };
+              }
+            }
+
             return { success: true, preview: value || 'Element found but no content' };
+          } else if (sel.regex && !sel.cssSelector && !sel.xpath) {
+            // Pure regex selector - apply to entire page content
+            try {
+              const pageText = document.body.textContent || '';
+              const regex = new RegExp(sel.regex, 'g');
+              const matches = regex.exec(pageText);
+              if (matches) {
+                const value = matches[1] || matches[0];
+                return { success: true, preview: value?.trim() || 'Regex matched but no content' };
+              } else {
+                return { success: false, error: 'Regex pattern did not match any content' };
+              }
+            } catch (regexError) {
+              return { success: false, error: `Invalid regex pattern: ${regexError.message}` };
+            }
           } else {
             return { success: false, error: 'Element not found' };
           }
