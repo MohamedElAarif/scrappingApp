@@ -175,37 +175,50 @@ export class ScrapingService {
     return await page.evaluate((selectors) => {
       const results: ScrapedData[] = [];
       
-      // Determine if we're extracting multiple items or single values
-      const firstSelector = selectors[0];
-      if (!firstSelector) return results;
+      if (!selectors || selectors.length === 0) return results;
 
-      // Try to find multiple elements first
-      const firstElements = firstSelector.cssSelector ? 
-        document.querySelectorAll(firstSelector.cssSelector) : [];
+      // Find the maximum number of elements across all selectors to determine item count
+      let maxElements = 0;
+      let itemSelectors: { selector: any; elements: Element[] }[] = [];
 
-      if (firstElements.length > 1) {
+      selectors.forEach(selector => {
+        let elements: Element[] = [];
+        
+        if (selector.cssSelector) {
+          elements = Array.from(document.querySelectorAll(selector.cssSelector));
+        } else if (selector.xpath) {
+          const result = document.evaluate(
+            selector.xpath,
+            document,
+            null,
+            XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
+            null
+          );
+          elements = [];
+          for (let i = 0; i < result.snapshotLength; i++) {
+            const element = result.snapshotItem(i);
+            if (element) elements.push(element as Element);
+          }
+        }
+        
+        itemSelectors.push({ selector, elements });
+        maxElements = Math.max(maxElements, elements.length);
+      });
+
+      // If we found multiple items, extract data for each
+      if (maxElements > 1) {
         // Multiple items detected - extract data for each item
-        firstElements.forEach((_, index) => {
+        for (let index = 0; index < maxElements; index++) {
           const item: ScrapedData = {};
           let hasData = false;
 
-          selectors.forEach(selector => {
+          let skipItem = false;
+          
+          for (const { selector, elements } of itemSelectors) {
+            if (skipItem) break;
+            
             try {
-              let element: Element | null = null;
-
-              if (selector.cssSelector) {
-                const elements = document.querySelectorAll(selector.cssSelector);
-                element = elements[index] || null;
-              } else if (selector.xpath) {
-                const result = document.evaluate(
-                  selector.xpath,
-                  document,
-                  null,
-                  XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-                  null
-                );
-                element = result.snapshotItem(index);
-              }
+              const element = elements[index] || null;
 
               if (element) {
                 let value: string | null = null;
@@ -242,7 +255,8 @@ export class ScrapingService {
                   item[selector.name] = value;
                   hasData = true;
                 } else if (selector.required) {
-                  return; // Skip this item if required field is missing
+                  skipItem = true; // Skip this item if required field is missing
+                  break;
                 }
               } else if (selector.regex && !selector.cssSelector && !selector.xpath) {
                 // Pure regex selector - apply to entire page content
@@ -257,29 +271,33 @@ export class ScrapingService {
                       hasData = true;
                     }
                   } else if (selector.required) {
-                    return; // Skip this item if required field is missing
+                    skipItem = true; // Skip this item if required field is missing
+                    break;
                   }
                 } catch (regexError) {
                   console.error(`Invalid regex pattern for ${selector.name}:`, regexError);
                   if (selector.required) {
-                    return;
+                    skipItem = true;
+                    break;
                   }
                 }
               } else if (selector.required) {
-                return; // Skip this item if required element not found
+                skipItem = true; // Skip this item if required element not found
+                break;
               }
             } catch (error) {
               console.error(`Error extracting ${selector.name}:`, error);
               if (selector.required) {
-                return; // Skip this item if required field fails
+                skipItem = true; // Skip this item if required field fails
+                break;
               }
             }
-          });
+          }
 
-          if (hasData) {
+          if (hasData && !skipItem) {
             results.push(item);
           }
-        });
+        }
       } else {
         // Single item extraction
         const item: ScrapedData = {};
