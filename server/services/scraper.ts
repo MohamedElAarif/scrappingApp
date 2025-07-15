@@ -177,11 +177,36 @@ export class ScrapingService {
       
       if (!selectors || selectors.length === 0) return results;
 
-      // Find the maximum number of elements across all selectors to determine item count
+      // Handle pure regex selectors separately to find all matches
+      const pureRegexSelectors = selectors.filter(s => s.regex && !s.cssSelector && !s.xpath);
+      const elementSelectors = selectors.filter(s => s.cssSelector || s.xpath);
+      
+      // Find all regex matches first
+      const regexResults: ScrapedData[] = [];
+      pureRegexSelectors.forEach(selector => {
+        if (selector.regex) {
+          try {
+            const pageText = document.body.textContent || '';
+            const regex = new RegExp(selector.regex, 'g');
+            let match;
+            while ((match = regex.exec(pageText)) !== null) {
+              const value = match[1] || match[0];
+              if (value) {
+                const fieldName = selector.name || 'extracted_data';
+                regexResults.push({ [fieldName]: value.trim() });
+              }
+            }
+          } catch (regexError) {
+            console.error(`Invalid regex pattern for ${selector.name}:`, regexError);
+          }
+        }
+      });
+
+      // Find the maximum number of elements across DOM selectors
       let maxElements = 0;
       let itemSelectors: { selector: any; elements: Element[] }[] = [];
 
-      selectors.forEach(selector => {
+      elementSelectors.forEach(selector => {
         let elements: Element[] = [];
         
         if (selector.cssSelector) {
@@ -260,27 +285,8 @@ export class ScrapingService {
                 }
               } else if (selector.regex && !selector.cssSelector && !selector.xpath) {
                 // Pure regex selector - apply to entire page content
-                try {
-                  const pageText = document.body.textContent || '';
-                  const regex = new RegExp(selector.regex, 'g');
-                  const matches = regex.exec(pageText);
-                  if (matches) {
-                    const value = matches[1] || matches[0];
-                    if (value) {
-                      item[selector.name] = value.trim();
-                      hasData = true;
-                    }
-                  } else if (selector.required) {
-                    skipItem = true; // Skip this item if required field is missing
-                    break;
-                  }
-                } catch (regexError) {
-                  console.error(`Invalid regex pattern for ${selector.name}:`, regexError);
-                  if (selector.required) {
-                    skipItem = true;
-                    break;
-                  }
-                }
+                // This should be handled separately for multiple matches
+                continue;
               } else if (selector.required) {
                 skipItem = true; // Skip this item if required element not found
                 break;
@@ -298,12 +304,12 @@ export class ScrapingService {
             results.push(item);
           }
         }
-      } else {
+      } else if (elementSelectors.length > 0) {
         // Single item extraction
         const item: ScrapedData = {};
         let hasData = false;
 
-        selectors.forEach(selector => {
+        for (const selector of elementSelectors) {
           try {
             let element: Element | null = null;
 
@@ -355,34 +361,20 @@ export class ScrapingService {
                 item[selector.name] = value;
                 hasData = true;
               }
-            } else if (selector.regex && !selector.cssSelector && !selector.xpath) {
-              // Pure regex selector - apply to entire page content
-              try {
-                const pageText = document.body.textContent || '';
-                const regex = new RegExp(selector.regex, 'g');
-                const matches = regex.exec(pageText);
-                if (matches) {
-                  const value = matches[1] || matches[0];
-                  if (value) {
-                    item[selector.name] = value.trim();
-                    hasData = true;
-                  }
-                }
-              } catch (regexError) {
-                console.error(`Invalid regex pattern for ${selector.name}:`, regexError);
-              }
             }
           } catch (error) {
             console.error(`Error extracting ${selector.name}:`, error);
           }
-        });
+        }
 
         if (hasData) {
           results.push(item);
         }
       }
 
-      return results;
+      // Combine regex results with element-based results
+      const allResults = [...regexResults, ...results];
+      return allResults;
     }, selectors);
   }
 

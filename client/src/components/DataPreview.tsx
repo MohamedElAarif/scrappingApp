@@ -57,15 +57,15 @@ export function DataPreview({ data, onRefresh, onClear }: DataPreviewProps) {
         {data.length > 0 ? (
           <>
             <div className="space-y-3 max-h-96 overflow-y-auto">
-              {data.slice(0, 10).map((item, index) => (
+              {data.slice(0, 50).map((item, index) => (
                 <div key={index} className="border border-gray-200 rounded p-3 text-sm">
                   <div className="space-y-1">
                     {Object.entries(item).map(([key, value]) => (
-                      <div key={key} className="flex justify-between">
-                        <span className="font-medium text-gray-700 capitalize">
-                          {key.replace(/([A-Z])/g, ' $1').trim()}:
+                      <div key={key} className="flex justify-between items-start">
+                        <span className="font-medium text-gray-700 capitalize flex-shrink-0 mr-2">
+                          {key || 'Data'}:
                         </span>
-                        <span className="text-gray-900 text-right max-w-xs truncate" title={value || ''}>
+                        <span className="text-gray-900 text-right flex-1 break-words" title={value || ''}>
                           {value || 'N/A'}
                         </span>
                       </div>
@@ -76,8 +76,8 @@ export function DataPreview({ data, onRefresh, onClear }: DataPreviewProps) {
             </div>
             
             <div className="mt-4 text-center text-sm text-gray-500">
-              Showing {Math.min(data.length, 10)} of {data.length} results
-              {data.length > 10 && ` (${data.length - 10} more available)`}
+              Showing {Math.min(data.length, 50)} of {data.length} results
+              {data.length > 50 && ` (${data.length - 50} more available)`}
             </div>
           </>
         ) : (
