@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { SelectorEditor } from "./SelectorEditor";
-import { Target, Crosshair, Filter, Save, TestTube, Play, CheckCircle } from "lucide-react";
+import { Target, Crosshair, Filter, Save, TestTube, Play, CheckCircle, Square } from "lucide-react";
 import { ScrapingConfiguration, ScrapingSelector } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -17,6 +17,7 @@ interface ConfigurationPanelProps {
   configuration: Partial<ScrapingConfiguration>;
   onChange: (config: Partial<ScrapingConfiguration>) => void;
   onStartScraping: () => void;
+  onStopScraping?: () => void;
   isScrapingActive: boolean;
 }
 
@@ -24,6 +25,7 @@ export function ConfigurationPanel({
   configuration, 
   onChange, 
   onStartScraping,
+  onStopScraping,
   isScrapingActive 
 }: ConfigurationPanelProps) {
   const [urlValidation, setUrlValidation] = useState<{ isValid?: boolean; message?: string }>({});
@@ -267,7 +269,43 @@ export function ConfigurationPanel({
               />
               Respect robots.txt
             </label>
+            <label className="flex items-center text-sm text-gray-700">
+              <Checkbox
+                checked={configuration.options?.multiWebsite || false}
+                onCheckedChange={(checked) => onChange({
+                  ...configuration,
+                  options: { ...configuration.options, multiWebsite: checked as boolean, extractUrlsFromResults: checked as boolean }
+                })}
+                className="mr-2"
+              />
+              Multi-Website Scraping
+            </label>
           </div>
+
+          {configuration.options?.multiWebsite && (
+            <div>
+              <Label className="block text-sm font-medium text-gray-700 mb-2">Multi-Website Settings</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-gray-600">Max Websites to Scrape</Label>
+                  <Input
+                    type="number"
+                    value={configuration.options?.maxWebsites || ""}
+                    onChange={(e) => onChange({
+                      ...configuration,
+                      options: { ...configuration.options, maxWebsites: parseInt(e.target.value) || 20 }
+                    })}
+                    placeholder="20"
+                    min="1"
+                    max="100"
+                  />
+                </div>
+                <div className="text-xs text-gray-500 flex items-center">
+                  <p>Enter a search results URL (like Google search) and the scraper will extract URLs from the results, then scrape each website.</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div>
             <Label className="block text-sm font-medium text-gray-700 mb-2">Pagination Settings</Label>
@@ -297,17 +335,29 @@ export function ConfigurationPanel({
 
       {/* Action Buttons */}
       <div className="flex space-x-4">
-        <Button
-          onClick={onStartScraping}
-          disabled={isScrapingActive || !configuration.targetUrl || !configuration.selectors?.length}
-          className="flex-1 bg-blue-700 hover:bg-blue-600 py-3 font-medium shadow-lg"
-        >
-          <Play className="h-4 w-4 mr-2" />
-          {isScrapingActive ? "Scraping..." : "Start Scraping"}
-        </Button>
+        {!isScrapingActive ? (
+          <Button
+            onClick={onStartScraping}
+            disabled={!configuration.targetUrl || !configuration.selectors?.length}
+            className="flex-1 bg-blue-700 hover:bg-blue-600 py-3 font-medium shadow-lg"
+          >
+            <Play className="h-4 w-4 mr-2" />
+            Start Scraping
+          </Button>
+        ) : (
+          <Button
+            onClick={onStopScraping}
+            variant="destructive"
+            className="flex-1 py-3 font-medium shadow-lg"
+          >
+            <Square className="h-4 w-4 mr-2" />
+            Stop Scraping
+          </Button>
+        )}
         <Button
           variant="outline"
           onClick={handleTestConfiguration}
+          disabled={isScrapingActive}
           className="px-6 py-3 font-medium"
         >
           <TestTube className="h-4 w-4 mr-2" />
@@ -316,7 +366,7 @@ export function ConfigurationPanel({
         <Button
           variant="outline"
           onClick={handleSaveConfiguration}
-          disabled={saveConfigMutation.isPending}
+          disabled={saveConfigMutation.isPending || isScrapingActive}
           className="px-6 py-3 font-medium"
         >
           <Save className="h-4 w-4 mr-2" />

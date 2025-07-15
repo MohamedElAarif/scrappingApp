@@ -47,6 +47,9 @@ export interface ScrapingOptions {
   waitForDynamic: boolean;
   removeDuplicates: boolean;
   respectRobots: boolean;
+  multiWebsite: boolean;
+  extractUrlsFromResults: boolean;
+  maxWebsites?: number;
 }
 
 export interface PaginationSettings {

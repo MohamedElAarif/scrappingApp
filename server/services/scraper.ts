@@ -78,14 +78,166 @@ export class ScrapingService {
       await page.setUserAgent(userAgents[config.userAgent as keyof typeof userAgents] || userAgents['Chrome (Desktop)']);
 
       const allResults: ScrapedData[] = [];
-      let currentPage = 1;
-      let hasNextPage = true;
-      let currentUrl = config.targetUrl;
+      
+      // Check if multi-website scraping is enabled
+      if (config.options?.multiWebsite && config.options?.extractUrlsFromResults) {
+        await this.scrapeMultipleWebsites(page, config, sessionId, allResults);
+      } else {
+        await this.scrapeSingleWebsite(page, config, sessionId, allResults);
+      }
 
-      while (hasNextPage && this.activeSessions.get(sessionId)) {
+      // Apply global filters and remove duplicates
+      let finalResults = allResults;
+      if (config.options?.removeDuplicates) {
+        finalResults = this.removeDuplicates(finalResults);
+      }
+
+      await storage.updateSessionResults(sessionId, finalResults);
+      await storage.updateSessionStatus(sessionId, 'completed', new Date());
+
+      await page.close();
+    } catch (error) {
+      console.error('Scraping error:', error);
+      await storage.addSessionError(sessionId, error instanceof Error ? error.message : 'Unknown error');
+      await storage.updateSessionStatus(sessionId, 'failed', new Date());
+    } finally {
+      this.activeSessions.delete(sessionId);
+    }
+  }
+
+  private async scrapeSingleWebsite(page: any, config: any, sessionId: number, allResults: ScrapedData[]): Promise<void> {
+    let currentPage = 1;
+    let hasNextPage = true;
+    let currentUrl = config.targetUrl;
+
+    while (hasNextPage && this.activeSessions.get(sessionId)) {
+      try {
+        await page.goto(currentUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+
+        // Wait for dynamic content if enabled
+        if (config.options?.waitForDynamic) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
+        // Add request delay
+        if (config.requestDelay && config.requestDelay > 0) {
+          await new Promise(resolve => setTimeout(resolve, config.requestDelay));
+        }
+
+        // Extract data using selectors
+        const pageResults = await this.extractDataFromPage(page, config.selectors);
+        
+        // Apply filters
+        const filteredResults = this.applyFilters(pageResults, config.filters);
+        allResults.push(...filteredResults);
+
+        // Update progress
+        const progress: ScrapingProgress = {
+          current: currentPage,
+          total: config.pagination?.maxPages || 1,
+          extracted: allResults.length,
+          errors: 0
+        };
+
+        await storage.updateSessionProgress(sessionId, progress);
+        await storage.updateSessionResults(sessionId, allResults);
+
+        // Handle pagination
+        if (config.options?.handlePagination && config.pagination?.nextSelector) {
+          const maxPages = config.pagination.maxPages || 10;
+          if (currentPage >= maxPages) {
+            hasNextPage = false;
+          } else {
+            const nextButton = await page.$(config.pagination.nextSelector);
+            if (nextButton) {
+              const isDisabled = await page.evaluate(el => {
+                return el.disabled || el.classList.contains('disabled') || 
+                       el.getAttribute('aria-disabled') === 'true';
+              }, nextButton);
+
+              if (!isDisabled) {
+                await nextButton.click();
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                currentPage++;
+                currentUrl = page.url();
+              } else {
+                hasNextPage = false;
+              }
+            } else {
+              hasNextPage = false;
+            }
+          }
+        } else {
+          hasNextPage = false;
+        }
+
+      } catch (error) {
+        console.error(`Page ${currentPage} error:`, error);
+        await storage.addSessionError(sessionId, `Page ${currentPage}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        hasNextPage = false;
+      }
+    }
+  }
+
+  private async scrapeMultipleWebsites(page: any, config: any, sessionId: number, allResults: ScrapedData[]): Promise<void> {
+    try {
+      // First, get URLs from the search results page
+      await page.goto(config.targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+      
+      // Wait for dynamic content if enabled
+      if (config.options?.waitForDynamic) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+
+      // Extract URLs from search results - common selectors for search result links
+      const urls = await page.evaluate(() => {
+        const urlSet = new Set<string>();
+        
+        // Common search result selectors
+        const selectors = [
+          'a[href*="http"]',  // Basic links
+          '.g a[href]',       // Google results
+          '.result a[href]',  // Bing results
+          '[data-href]',      // Some dynamic links
+          'cite'              // Citation elements often contain URLs
+        ];
+        
+        selectors.forEach(selector => {
+          const elements = document.querySelectorAll(selector);
+          elements.forEach((el: any) => {
+            let url = el.href || el.getAttribute('data-href') || el.textContent;
+            if (url && url.startsWith('http') && !url.includes('google.') && !url.includes('bing.') && !url.includes('yahoo.')) {
+              // Clean up Google redirect URLs
+              if (url.includes('/url?q=')) {
+                const match = url.match(/[?&]q=([^&]+)/);
+                if (match) {
+                  url = decodeURIComponent(match[1]);
+                }
+              }
+              urlSet.add(url);
+            }
+          });
+        });
+        
+        return Array.from(urlSet);
+      });
+
+      console.log(`Found ${urls.length} URLs to scrape`);
+      
+      const maxWebsites = Math.min(urls.length, config.options?.maxWebsites || 20);
+      let currentWebsite = 0;
+      
+      // Scrape each website
+      for (let i = 0; i < maxWebsites && this.activeSessions.get(sessionId); i++) {
+        const url = urls[i];
+        currentWebsite++;
+        
         try {
-          await page.goto(currentUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-
+          console.log(`Scraping website ${currentWebsite}/${maxWebsites}: ${url}`);
+          
+          // Navigate to the website
+          await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+          
           // Wait for dynamic content if enabled
           if (config.options?.waitForDynamic) {
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -99,70 +251,35 @@ export class ScrapingService {
           // Extract data using selectors
           const pageResults = await this.extractDataFromPage(page, config.selectors);
           
+          // Add source URL to each result
+          const resultsWithSource = pageResults.map(result => ({
+            ...result,
+            source_url: url
+          }));
+          
           // Apply filters
-          const filteredResults = this.applyFilters(pageResults, config.filters);
+          const filteredResults = this.applyFilters(resultsWithSource, config.filters);
           allResults.push(...filteredResults);
 
           // Update progress
           const progress: ScrapingProgress = {
-            current: currentPage,
-            total: config.pagination?.maxPages || 1,
+            current: currentWebsite,
+            total: maxWebsites,
             extracted: allResults.length,
             errors: 0
           };
 
           await storage.updateSessionProgress(sessionId, progress);
           await storage.updateSessionResults(sessionId, allResults);
-
-          // Handle pagination
-          if (config.options?.handlePagination && config.pagination?.nextSelector) {
-            const maxPages = config.pagination.maxPages || 10;
-            if (currentPage >= maxPages) {
-              hasNextPage = false;
-            } else {
-              const nextButton = await page.$(config.pagination.nextSelector);
-              if (nextButton) {
-                const isDisabled = await page.evaluate(el => {
-                  return el.disabled || el.classList.contains('disabled') || 
-                         el.getAttribute('aria-disabled') === 'true';
-                }, nextButton);
-
-                if (!isDisabled) {
-                  await nextButton.click();
-                  await new Promise(resolve => setTimeout(resolve, 2000));
-                  currentPage++;
-                  currentUrl = page.url();
-                } else {
-                  hasNextPage = false;
-                }
-              } else {
-                hasNextPage = false;
-              }
-            }
-          } else {
-            hasNextPage = false;
-          }
-
+          
         } catch (error) {
-          await storage.addSessionError(sessionId, `Page ${currentPage}: ${error.message}`);
-          hasNextPage = false;
+          console.error(`Error scraping ${url}:`, error);
+          await storage.addSessionError(sessionId, `Website ${currentWebsite} (${url}): ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       }
-
-      await page.close();
-
-      // Remove duplicates if enabled
-      const finalResults = config.options?.removeDuplicates ? 
-        this.removeDuplicates(allResults) : allResults;
-
-      await storage.updateSessionResults(sessionId, finalResults);
-      await storage.updateSessionStatus(sessionId, 'completed', new Date());
-
     } catch (error) {
-      await storage.addSessionError(sessionId, error.message);
-      await storage.updateSessionStatus(sessionId, 'failed', new Date());
-    } finally {
-      this.activeSessions.delete(sessionId);
+      console.error('Multi-website scraping error:', error);
+      await storage.addSessionError(sessionId, `Multi-website setup error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 

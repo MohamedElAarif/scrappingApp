@@ -41,9 +41,11 @@ The application follows a modern full-stack architecture with clear separation b
 ### Web Scraping Engine
 - **Browser Automation**: Puppeteer for dynamic content handling
 - **Selector Support**: CSS selectors, XPath expressions, and regex patterns
+- **Multi-Website Scraping**: Extract URLs from search results and scrape multiple sites
 - **Pagination**: Automatic navigation through multi-page content
 - **User Agent Spoofing**: Multiple browser profiles for different sites
 - **Request Throttling**: Configurable delays to respect server limits
+- **Session Control**: Real-time start/stop scraping functionality
 
 ### Configuration Management
 - **Flexible Selectors**: Multiple data extraction rules per configuration (CSS, XPath, Regex)

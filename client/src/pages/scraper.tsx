@@ -66,6 +66,24 @@ export default function ScraperPage() {
     }
   });
 
+  // Stop scraping mutation
+  const stopScrapingMutation = useMutation({
+    mutationFn: async () => {
+      if (!currentSessionId) throw new Error("No active session");
+      const response = await apiRequest("POST", "/api/scraping/stop", { 
+        sessionId: currentSessionId 
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Scraping Stopped", description: "Data extraction has been stopped" });
+      queryClient.invalidateQueries({ queryKey: ["/api/sessions", currentSessionId] });
+    },
+    onError: () => {
+      toast({ title: "Failed to Stop", description: "Could not stop scraping", variant: "destructive" });
+    }
+  });
+
   // Save configuration helper
   const saveCurrentConfig = async (): Promise<number> => {
     const response = await apiRequest("POST", "/api/configurations", {
@@ -88,6 +106,10 @@ export default function ScraperPage() {
     }
 
     startScrapingMutation.mutate();
+  };
+
+  const handleStopScraping = () => {
+    stopScrapingMutation.mutate();
   };
 
   const handleLoadConfiguration = (config: ScrapingConfiguration) => {
@@ -136,6 +158,7 @@ export default function ScraperPage() {
               configuration={configuration}
               onChange={setConfiguration}
               onStartScraping={handleStartScraping}
+              onStopScraping={handleStopScraping}
               isScrapingActive={isScrapingActive}
             />
           </div>
