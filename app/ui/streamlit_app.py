@@ -1,4 +1,5 @@
 import streamlit as st
+import re
 from typing import List
 
 from app.scraping.types import ScrapeJob, RequestOptions, LoginCredentials, Filters
@@ -48,6 +49,8 @@ with st.form("scrape_form"):
     pattern = ""
     if "pattern" in content_types:
         pattern = st.text_input("Regex pattern to find (applies to visible text)", value="")
+    if "pattern" in content_types and not pattern:
+        st.caption("Tip: Enter a regex for Pattern, e.g. \\bORD-\\d{6}\\b")
     submitted = st.form_submit_button("Scrape")
 
 results = []
@@ -55,6 +58,21 @@ if submitted:
     if not url or not content_types:
         st.warning("Please enter a URL and select at least one content type.")
     else:
+        # Validate regex inputs early and provide feedback
+        if "pattern" in content_types and pattern:
+            try:
+                re.compile(pattern)
+            except re.error as e:
+                st.error(f"Invalid regex for Pattern: {e}")
+                pattern = ""
+
+        if href_regex:
+            try:
+                re.compile(href_regex)
+            except re.error as e:
+                st.error(f"Invalid regex for Href filter: {e}")
+                href_regex = ""
+
         req_opts = RequestOptions(
             timeout_seconds=int(timeout_seconds),
             use_random_user_agent=use_random_user_agent,

@@ -166,6 +166,7 @@ def extract_emails(soup: BeautifulSoup, filters: Filters | None = None) -> List[
     emails: Dict[str, str] = {}
 
     # From mailto links
+    from urllib.parse import urlparse, parse_qs, unquote
     for root in roots:
         for a in root.find_all("a", href=True):
             if _is_within_any(a, excluded):
@@ -173,10 +174,19 @@ def extract_emails(soup: BeautifulSoup, filters: Filters | None = None) -> List[
             if included and not _is_within_any(a, included) and a not in included:
                 continue
             href = a.get("href", "")
-            if href.lower().startswith("mailto:"):
-                addr = href.split(":", 1)[1].split("?", 1)[0]
-                if addr and email_re.fullmatch(addr) and addr not in emails:
-                    emails[addr] = "mailto"
+            parsed = urlparse(href)
+            if parsed.scheme.lower() == "mailto":
+                candidates: List[str] = []
+                if parsed.path:
+                    candidates.extend([p.strip() for p in parsed.path.split(",") if p.strip()])
+                if not candidates:
+                    to_vals = parse_qs(parsed.query).get("to", [])
+                    for v in to_vals:
+                        candidates.extend([p.strip() for p in v.split(",") if p.strip()])
+                for raw in candidates:
+                    addr = unquote(raw)
+                    if addr and email_re.fullmatch(addr) and addr not in emails:
+                        emails[addr] = "mailto"
 
     # From visible text
     for text in _iter_visible_strings(roots, excluded, included):
@@ -184,6 +194,23 @@ def extract_emails(soup: BeautifulSoup, filters: Filters | None = None) -> List[
             addr = m.group(0)
             if addr not in emails:
                 emails[addr] = "text"
+
+    # Cloudflare obfuscated emails: data-cfemail
+    def _decode_cfemail(hex_string: str) -> str:
+        try:
+            data = bytes.fromhex(hex_string)
+            key = data[0]
+            decoded = bytes([b ^ key for b in data[1:]])
+            return decoded.decode("utf-8", errors="ignore")
+        except Exception:
+            return ""
+
+    for el in soup.select('[data-cfemail]'):
+        cf = el.get("data-cfemail")
+        if cf:
+            addr = _decode_cfemail(cf)
+            if addr and email_re.fullmatch(addr) and addr not in emails:
+                emails[addr] = "cfemail"
 
     return [{"email": addr, "source": source} for addr, source in emails.items()]
 
