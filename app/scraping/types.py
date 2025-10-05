@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Literal, Any
 
-ContentType = Literal["text", "images", "tables", "links"]
+ContentType = Literal["text", "images", "tables", "links", "emails", "pattern"]
 
 
 @dataclass
@@ -11,6 +11,21 @@ class RequestOptions:
     use_random_user_agent: bool = True
     delay_seconds_min: float = 0.5
     delay_seconds_max: float = 2.0
+
+
+@dataclass
+class Filters:
+    """Optional extraction filters and scoping.
+
+    - scope_selector: restrict scraping to elements within this CSS selector
+    - include_selectors: if provided, only extract from elements matching any of these selectors
+    - exclude_selectors: skip elements that are inside any of these selectors
+    - href_regex: optional regex to filter link hrefs
+    """
+    scope_selector: Optional[str] = None
+    include_selectors: List[str] = field(default_factory=list)
+    exclude_selectors: List[str] = field(default_factory=list)
+    href_regex: Optional[str] = None
 
 
 @dataclass
@@ -32,6 +47,10 @@ class ScrapeJob:
     login: Optional[LoginCredentials] = None
     request_options: RequestOptions = field(default_factory=RequestOptions)
     javascript_render: bool = False
+    # New capabilities
+    filters: Optional[Filters] = None
+    # Used when content_types includes "pattern"
+    pattern: Optional[str] = None
 
 
 @dataclass

@@ -1,7 +1,8 @@
 import streamlit as st
+import re
 from typing import List
 
-from app.scraping.types import ScrapeJob, RequestOptions, LoginCredentials
+from app.scraping.types import ScrapeJob, RequestOptions, LoginCredentials, Filters
 from app.scraping.static_scraper import scrape_static
 from app.scraping.dynamic_scraper import scrape_dynamic
 from app.export.exporter import export_results
@@ -14,7 +15,7 @@ with st.form("scrape_form"):
     url = st.text_input("Target URL", placeholder="https://example.com")
     content_types: List[str] = st.multiselect(
         "Content to scrape",
-        ["text", "images", "tables", "links"],
+        ["text", "images", "tables", "links", "emails", "pattern"],
         default=["links", "text"],
     )
 
@@ -31,6 +32,12 @@ with st.form("scrape_form"):
         delay_min = st.number_input("Delay min (s)", min_value=0.0, max_value=10.0, value=0.5)
         delay_max = st.number_input("Delay max (s)", min_value=0.0, max_value=15.0, value=2.0)
 
+    with st.expander("Filters & scope"):
+        scope_selector = st.text_input("Scope CSS selector", value="", placeholder="e.g. main, #content, .article")
+        include_selectors_raw = st.text_input("Include selectors (comma-separated)", value="")
+        exclude_selectors_raw = st.text_input("Exclude selectors (comma-separated)", value="")
+        href_regex = st.text_input("Href regex filter (links)", value="")
+
     with st.expander("Optional login"):
         username = st.text_input("Username", value="")
         password = st.text_input("Password", value="", type="password")
@@ -39,6 +46,11 @@ with st.form("scrape_form"):
         submit_selector = st.text_input("Submit button CSS selector", value="")
 
     export_fmt = st.selectbox("Export format", ["CSV", "JSON", "Excel"], index=0)
+    pattern = ""
+    if "pattern" in content_types:
+        pattern = st.text_input("Regex pattern to find (applies to visible text)", value="")
+    if "pattern" in content_types and not pattern:
+        st.caption("Tip: Enter a regex for Pattern, e.g. \\bORD-\\d{6}\\b")
     submitted = st.form_submit_button("Scrape")
 
 results = []
@@ -46,6 +58,21 @@ if submitted:
     if not url or not content_types:
         st.warning("Please enter a URL and select at least one content type.")
     else:
+        # Validate regex inputs early and provide feedback
+        if "pattern" in content_types and pattern:
+            try:
+                re.compile(pattern)
+            except re.error as e:
+                st.error(f"Invalid regex for Pattern: {e}")
+                pattern = ""
+
+        if href_regex:
+            try:
+                re.compile(href_regex)
+            except re.error as e:
+                st.error(f"Invalid regex for Href filter: {e}")
+                href_regex = ""
+
         req_opts = RequestOptions(
             timeout_seconds=int(timeout_seconds),
             use_random_user_agent=use_random_user_agent,
@@ -62,6 +89,17 @@ if submitted:
                 submit_selector=submit_selector or None,
             )
 
+        filters = None
+        include_selectors = [s.strip() for s in include_selectors_raw.split(",") if s.strip()]
+        exclude_selectors = [s.strip() for s in exclude_selectors_raw.split(",") if s.strip()]
+        if scope_selector or include_selectors or exclude_selectors or href_regex:
+            filters = Filters(
+                scope_selector=scope_selector or None,
+                include_selectors=include_selectors,
+                exclude_selectors=exclude_selectors,
+                href_regex=href_regex or None,
+            )
+
         job = ScrapeJob(
             url=url,
             content_types=content_types,
@@ -71,6 +109,8 @@ if submitted:
             login=login,
             request_options=req_opts,
             javascript_render=bool(javascript_render),
+            filters=filters,
+            pattern=pattern or None,
         )
 
         with st.spinner("Scraping in progress..."):

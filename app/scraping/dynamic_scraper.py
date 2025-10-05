@@ -82,14 +82,19 @@ def scrape_dynamic(job: ScrapeJob) -> List[ScrapedResult]:
                 html = driver.page_source
 
             soup = BeautifulSoup(html, "lxml")
+            filters = job.filters
             if "text" in job.content_types:
-                results.append(ScrapedResult(url=next_url, content_type="text", data=extractors.extract_text(soup)))
+                results.append(ScrapedResult(url=next_url, content_type="text", data=extractors.extract_text(soup, filters)))
             if "links" in job.content_types:
-                results.append(ScrapedResult(url=next_url, content_type="links", data=extractors.extract_links(soup)))
+                results.append(ScrapedResult(url=next_url, content_type="links", data=extractors.extract_links(soup, filters)))
             if "images" in job.content_types:
-                results.append(ScrapedResult(url=next_url, content_type="images", data=extractors.extract_images(soup)))
+                results.append(ScrapedResult(url=next_url, content_type="images", data=extractors.extract_images(soup, filters)))
             if "tables" in job.content_types:
-                results.append(ScrapedResult(url=next_url, content_type="tables", data=extractors.extract_tables(soup)))
+                results.append(ScrapedResult(url=next_url, content_type="tables", data=extractors.extract_tables(soup, filters)))
+            if "emails" in job.content_types:
+                results.append(ScrapedResult(url=next_url, content_type="emails", data=extractors.extract_emails(soup, filters)))
+            if "pattern" in job.content_types:
+                results.append(ScrapedResult(url=next_url, content_type="pattern", data=extractors.extract_pattern(soup, job.pattern, filters)))
 
             visited += 1
             human_delay(job.request_options.delay_seconds_min, job.request_options.delay_seconds_max)

@@ -23,14 +23,19 @@ def scrape_static(job: ScrapeJob) -> List[ScrapedResult]:
         html = fetch_page(url, headers=headers, timeout_seconds=job.request_options.timeout_seconds)
         soup = BeautifulSoup(html, "lxml")
         content_map: Dict[str, List[Dict]] = {}
+        filters = job.filters
         if "text" in job.content_types:
-            content_map["text"] = extractors.extract_text(soup)
+            content_map["text"] = extractors.extract_text(soup, filters)
         if "links" in job.content_types:
-            content_map["links"] = extractors.extract_links(soup)
+            content_map["links"] = extractors.extract_links(soup, filters)
         if "images" in job.content_types:
-            content_map["images"] = extractors.extract_images(soup)
+            content_map["images"] = extractors.extract_images(soup, filters)
         if "tables" in job.content_types:
-            content_map["tables"] = extractors.extract_tables(soup)
+            content_map["tables"] = extractors.extract_tables(soup, filters)
+        if "emails" in job.content_types:
+            content_map["emails"] = extractors.extract_emails(soup, filters)
+        if "pattern" in job.content_types:
+            content_map["pattern"] = extractors.extract_pattern(soup, job.pattern, filters)
         return content_map
 
     # Handle simple page parameter pagination or next-link selector
